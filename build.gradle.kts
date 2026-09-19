@@ -4,6 +4,7 @@ import com.github.spotbugs.snom.SpotBugsTask
 
 plugins {
     java
+    jacoco
     id("org.springframework.boot") version "3.5.6"
     id("io.spring.dependency-management") version "1.1.7"
     id("com.github.spotbugs") version "6.2.4"
@@ -68,6 +69,60 @@ tasks.withType<Test> {
     systemProperty("com.github.dockerjava.api.version", "1.44")
 }
 
+tasks.test {
+    description = "Runs isolated service unit tests without Docker or Spring startup."
+    exclude("**/*IT.class", "**/RoomFlowApplicationTests.class")
+}
+
+val integrationTest by tasks.registering(Test::class) {
+    description = "Runs API, PostgreSQL and S3 integration tests. Requires Docker."
+    group = "verification"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    include("**/*IT.class", "**/RoomFlowApplicationTests.class")
+    shouldRunAfter(tasks.test)
+}
+
+jacoco {
+    toolVersion = "0.8.15"
+}
+
+tasks.jacocoTestReport {
+    dependsOn(tasks.test, integrationTest)
+    executionData.setFrom(layout.buildDirectory.file("jacoco/test.exec"), layout.buildDirectory.file("jacoco/integrationTest.exec"))
+    reports {
+        xml.required = true
+        html.required = true
+    }
+}
+
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.jacocoTestReport)
+    executionData.setFrom(layout.buildDirectory.file("jacoco/test.exec"), layout.buildDirectory.file("jacoco/integrationTest.exec"))
+    violationRules {
+        rule {
+            limit {
+                counter = "LINE"
+                minimum = "0.70".toBigDecimal()
+            }
+        }
+        rule {
+            element = "CLASS"
+            includes = listOf(
+                "*.BookingManagementService",
+                "*.RefreshTokenService",
+                "*.FileStorageService",
+                "*.AuthService",
+                "*.AdminUserService",
+            )
+            limit {
+                counter = "LINE"
+                minimum = "0.85".toBigDecimal()
+            }
+        }
+    }
+}
+
 spotbugs {
     effort = Effort.MAX
     reportLevel = Confidence.MEDIUM
@@ -112,7 +167,7 @@ pmd {
 }
 
 tasks.named("check") {
-    dependsOn("spotbugsMain", "spotbugsTest", "spotlessCheck", "pmdMain")
+    dependsOn("spotbugsMain", "spotbugsTest", "spotlessCheck", "pmdMain", integrationTest, tasks.jacocoTestCoverageVerification)
 }
 
 tasks.named("pmdTest") {
