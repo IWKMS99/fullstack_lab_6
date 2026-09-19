@@ -35,3 +35,28 @@ it('disables submission during saving and resets edit values on reopen', () => {
   fireEvent.click(screen.getByRole('button', {name: 'Отмена'}));
   expect(props.onClose).toHaveBeenCalledOnce();
 });
+
+it('preserves edited input when a parent renders equivalent initial values', async () => {
+  const props = base();
+  const view = render(<RoomFormModal {...props} mode="edit" initialValues={{name: 'Orion', floor: 2, capacity: 8}} />);
+  fireEvent.change(screen.getByRole('textbox', {name: 'Название'}), {target: {value: 'Orion updated'}});
+  view.rerender(<RoomFormModal {...props} mode="edit" initialValues={{name: 'Orion', floor: 2, capacity: 8}} />);
+  expect(screen.getByRole('textbox', {name: 'Название'})).toHaveValue('Orion updated');
+  fireEvent.click(screen.getByRole('button', {name: 'Сохранить'}));
+  await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith({name: 'Orion updated', floor: 2, capacity: 8}));
+});
+
+it('starts a fresh create form after closing without resetting input while open', async () => {
+  const props = base();
+  const view = render(<RoomFormModal {...props} isOpen={false} />);
+  view.rerender(<RoomFormModal {...props} />);
+  fireEvent.change(screen.getByRole('textbox', {name: 'Название'}), {target: {value: 'First draft'}});
+  view.rerender(<RoomFormModal {...props} errorMessage="Retry" />);
+  expect(screen.getByRole('textbox', {name: 'Название'})).toHaveValue('First draft');
+  view.rerender(<RoomFormModal {...props} isOpen={false} />);
+  view.rerender(<RoomFormModal {...props} />);
+  expect(screen.getByRole('textbox', {name: 'Название'})).toHaveValue('');
+  fireEvent.change(screen.getByRole('textbox', {name: 'Название'}), {target: {value: 'Second draft'}});
+  fireEvent.click(screen.getByRole('button', {name: 'Создать'}));
+  await waitFor(() => expect(props.onSubmit).toHaveBeenCalledWith({name: 'Second draft', floor: 1, capacity: 1}));
+});

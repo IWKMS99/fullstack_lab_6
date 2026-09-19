@@ -27,8 +27,7 @@ const DEFAULT_VALUES: RoomFormValues = {
   capacity: 1,
 };
 
-const RoomFormModal = ({
-  isOpen,
+const RoomFormFields = ({
   mode,
   initialValues,
   isPending = false,
@@ -52,21 +51,10 @@ const RoomFormModal = ({
     control,
     handleSubmit,
     formState: {errors},
-    reset,
   } = useForm<RoomFormValues>({
     resolver: zodResolver(roomSchema),
     defaultValues: initialValues ?? DEFAULT_VALUES,
   });
-
-  React.useEffect(() => {
-    if (isOpen) {
-      reset(initialValues ?? DEFAULT_VALUES);
-    }
-  }, [initialValues, isOpen, reset]);
-
-  if (!isOpen) {
-    return null;
-  }
 
   return (
     <div className="absolute inset-0 z-[120] flex items-center justify-center bg-black/60 p-4">
@@ -148,6 +136,15 @@ const RoomFormModal = ({
       </form>
     </div>
   );
+};
+
+const RoomFormModal = (props: RoomFormModalProps) => {
+  if (!props.isOpen) return null;
+  // A new editing session gets defaults before input becomes interactive.
+  // Equivalent values from a parent render must preserve the current draft.
+  const {mode, initialValues} = props;
+  const sessionKey = JSON.stringify([mode, initialValues?.name, initialValues?.floor, initialValues?.capacity]);
+  return <RoomFormFields key={sessionKey} {...props} />;
 };
 
 export default RoomFormModal;
