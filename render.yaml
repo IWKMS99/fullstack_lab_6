@@ -17,7 +17,7 @@ services:
       - key: BOOTSTRAP_ADMIN_EMAIL
         value: admin@roomflow.local
       - key: BOOTSTRAP_ADMIN_PASSWORD
-        sync: false
+        generateValue: true
       - key: SPRING_DATASOURCE_URL
         sync: false
       - key: SPRING_DATASOURCE_USERNAME
