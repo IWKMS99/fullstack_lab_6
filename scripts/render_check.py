@@ -3,6 +3,7 @@
 Requires an already-built image, Docker, and Python 3.9+; reads no .env file.
   python scripts/render_check.py --image roomflow-render:local --port 18088
 Only a loopback HTTP port is published. Containers/network are removed on exit.
+Exercises Render's DATABASE_URL URI with separately supplied database credentials.
 """
 
 import argparse
@@ -16,6 +17,7 @@ import secrets
 import subprocess
 import time
 from urllib.error import HTTPError, URLError
+from urllib.parse import quote
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 import uuid
 
@@ -78,13 +80,19 @@ def main():
     application = f"{network}-app"
     base = f"http://127.0.0.1:{args.port}"
     # Fresh values are passed only to these disposable containers; no project secrets are loaded.
+    db_user = "render_test"
+    db_password = secrets.token_hex(24) + "@:/?#%"
+    database_url = (f"postgresql://{quote(db_user, safe='')}:{quote(db_password, safe='')}"
+                    "@render-db:5432/render_test?sslmode=disable")
     env = os.environ.copy()
     env.update({
-        "POSTGRES_DB": "render_test", "POSTGRES_USER": "render_test",
-        "POSTGRES_PASSWORD": secrets.token_hex(24),
+        "POSTGRES_DB": "render_test", "POSTGRES_USER": db_user,
+        "POSTGRES_PASSWORD": db_password,
         "JWT_SECRET": base64.b64encode(secrets.token_bytes(48)).decode("ascii"),
         "SPRING_PROFILES_ACTIVE": "docker",
-        "SPRING_DATASOURCE_URL": "jdbc:postgresql://db:5432/render_test",
+        "DATABASE_URL": database_url,
+        "SPRING_DATASOURCE_USERNAME": db_user,
+        "SPRING_DATASOURCE_PASSWORD": db_password,
         "SPRING_FLYWAY_LOCATIONS": "classpath:db/migration",
         "PORT": "10000", "APP_PUBLIC_BASE_URL": base,
         "BOOTSTRAP_ADMIN_EMAIL": "", "BOOTSTRAP_ADMIN_PASSWORD": "",
@@ -94,13 +102,15 @@ def main():
     })
     try:
         docker("network", "create", network)
-        docker("run", "-d", "--name", database, "--network", network, "--network-alias", "db",
+        docker("run", "-d", "--name", database, "--network", network, "--network-alias", "render-db",
                "--tmpfs", "/var/lib/postgresql/data:rw", "-e", "POSTGRES_DB", "-e", "POSTGRES_USER",
                "-e", "POSTGRES_PASSWORD", "postgres:16-alpine", env=env)
         wait_until(lambda: "accepting connections" in docker("exec", database, "pg_isready", "-U", "render_test", "-d", "render_test", check=False),
                    "Temporary database did not start", timeout=60)
-        names = ("POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD", "JWT_SECRET", "SPRING_PROFILES_ACTIVE",
-                 "SPRING_DATASOURCE_URL", "SPRING_FLYWAY_LOCATIONS", "PORT", "APP_PUBLIC_BASE_URL",
+        # No direct JDBC URL or POSTGRES_* values reach the application. Otherwise the Docker
+        # profile's fallback connection could hide a broken DATABASE_URL conversion.
+        names = ("DATABASE_URL", "SPRING_DATASOURCE_USERNAME", "SPRING_DATASOURCE_PASSWORD",
+                 "JWT_SECRET", "SPRING_PROFILES_ACTIVE", "SPRING_FLYWAY_LOCATIONS", "PORT", "APP_PUBLIC_BASE_URL",
                  "BOOTSTRAP_ADMIN_EMAIL", "BOOTSTRAP_ADMIN_PASSWORD", "AUTH_REFRESH_COOKIE_SECURE",
                  "S3_ENDPOINT", "S3_PUBLIC_ENDPOINT", "S3_ACCESS_KEY", "S3_SECRET_KEY")
         variables = [value for name in names for value in ("-e", name)]
@@ -123,7 +133,7 @@ def main():
         configured_user = docker("inspect", "--format", "{{.Config.User}}", application)
         if configured_user in ("", "0", "root"):
             raise AssertionError("Render runtime must use a non-root user")
-        print("PASS: combined Nginx/Java image starts as non-root with an isolated database", flush=True)
+        print("PASS: DATABASE_URL URI conversion, separate credentials and non-root Nginx/Java startup", flush=True)
 
         html, _ = client.request("GET", "/schedule")
         for marker in ("<title>", 'rel="canonical"', "application/ld+json", base):
