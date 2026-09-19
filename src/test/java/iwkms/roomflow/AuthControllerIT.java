@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -51,6 +52,26 @@ public class AuthControllerIT {
 
     @Autowired
     private AuthService authService;
+
+    @Test
+    void configuredPublicOriginCanReachAuthentication() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .header("Origin", "http://localhost:8080")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"missing@example.com\",\"password\":\"wrongpassword\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:8080"));
+    }
+
+    @Test
+    void untrustedOriginCannotSubmitCredentials() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .header("Origin", "https://evil.test")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"missing@example.com\",\"password\":\"wrongpassword\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+    }
 
     @Test
     @DisplayName("POST /auth/register: должен успешно зарегистрировать нового пользователя и вернуть refresh cookie")

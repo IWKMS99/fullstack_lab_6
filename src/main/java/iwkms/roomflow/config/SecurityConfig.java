@@ -5,6 +5,8 @@ import static org.springframework.security.config.http.SessionCreationPolicy.STA
 import iwkms.roomflow.config.security.JwtAuthFilter;
 import iwkms.roomflow.modules.user.impl.repository.UserRepository;
 import java.util.List;
+import java.util.stream.Stream;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -32,9 +34,16 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 public class SecurityConfig {
 
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.public-base-url:http://localhost:8080}") String publicBaseUrl,
+            @Value("${app.cors.allowed-origins:http://localhost:5173}") List<String> additionalOrigins) {
         CorsConfiguration configuration = new CorsConfiguration();
-        configuration.setAllowedOrigins(List.of("http://localhost:5173", "http://localhost:8080"));
+        configuration.setAllowedOrigins(Stream.concat(Stream.of(publicBaseUrl), additionalOrigins.stream())
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .map(origin -> origin.replaceAll("/+$", ""))
+                .distinct()
+                .toList());
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
         configuration.setAllowCredentials(true);
