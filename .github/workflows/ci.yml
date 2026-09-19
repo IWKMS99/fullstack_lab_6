@@ -2,9 +2,9 @@ name: RoomFlow CI
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "main" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "main" ]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -52,7 +52,7 @@ jobs:
         run: ./gradlew check --info
 
       - name: Upload analysis reports
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: analysis-reports
@@ -60,6 +60,7 @@ jobs:
             build/reports/tests/
             build/reports/pmd/
             build/reports/spotbugs/
+            build/reports/jacoco/
 
   frontend-check:
     runs-on: ubuntu-latest
@@ -85,7 +86,14 @@ jobs:
 
       - name: Run frontend unit tests
         working-directory: ./frontend
-        run: npm run test
+        run: npm run test:coverage
+
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-coverage
+          path: frontend/coverage/
 
       - name: Build frontend
         working-directory: ./frontend

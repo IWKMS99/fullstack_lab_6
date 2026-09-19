@@ -1,0 +1,80 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: roomflow_test
+      POSTGRES_USER: roomflow_test
+      POSTGRES_PASSWORD: isolated-test-password
+    tmpfs: /var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U roomflow_test -d roomflow_test']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  minio:
+    image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: test-storage
+      MINIO_ROOT_PASSWORD: isolated-storage-password
+    ports: ['127.0.0.1:19085:9000']
+    tmpfs: /data
+    healthcheck:
+      test: [CMD-SHELL, 'curl -fsS http://localhost:9000/minio/health/live']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  bucket:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      minio: {condition: service_healthy}
+    entrypoint: ['/bin/sh', '-ec', 'mc alias set test http://minio:9000 test-storage isolated-storage-password; mc mb --ignore-existing test/test-files; mc anonymous set none test/test-files']
+  holiday:
+    image: python:3.13-alpine
+    command: ['python', '/test/holiday_stub.py']
+    volumes: ['./scripts/holiday_stub.py:/test/holiday_stub.py:ro']
+    ports: ['127.0.0.1:19084:8090']
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  app:
+    build: {context: ., dockerfile: Dockerfile}
+    volumes: ['./scripts/http_healthcheck.sh:/test/http_healthcheck.sh:ro']
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      POSTGRES_DB: roomflow_test
+      POSTGRES_USER: roomflow_test
+      POSTGRES_PASSWORD: isolated-test-password
+      JWT_SECRET: 'cm9vbWZsb3ctZXhlY3V0YWJsZS10ZXN0LWZpeHR1cmUtbm90LWEtcHJvZC1zZWNyZXQ='
+      JWT_ACCESS_EXPIRATION_MS: '900000'
+      BOOTSTRAP_ADMIN_EMAIL: admin@e2e.test
+      BOOTSTRAP_ADMIN_PASSWORD: Test-Admin-Password-2026
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: http://127.0.0.1:19085
+      S3_ACCESS_KEY: test-storage
+      S3_SECRET_KEY: isolated-storage-password
+      S3_BUCKET: test-files
+      HOLIDAY_API_BASE_URL: http://holiday:8090
+      APP_PUBLIC_BASE_URL: http://127.0.0.1:18085
+      RESILIENCE4J_CIRCUITBREAKER_INSTANCES_HOLIDAYAPI_MINIMUMNUMBEROFCALLS: '20'
+    depends_on:
+      db: {condition: service_healthy}
+      bucket: {condition: service_completed_successfully}
+      holiday: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, bash, /test/http_healthcheck.sh]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+  nginx:
+    build: {context: ., dockerfile: Dockerfile_nginx}
+    ports: ['127.0.0.1:18085:80']
+    depends_on:
+      app: {condition: service_healthy}
+    healthcheck:
+      test: [CMD-SHELL, 'wget -q -O /dev/null http://127.0.0.1/api/v1/schedule?date=2030-01-02']
+      interval: 3s
+      timeout: 5s
+      retries: 30

@@ -12,3 +12,5 @@ frontend/dist/
 frontend/test-results/
 frontend/playwright-report/
 frontend/coverage/
+frontend/test-results-real/
+frontend/playwright-report-real/

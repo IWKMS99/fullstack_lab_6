@@ -3,7 +3,9 @@ name: Frontend E2E
 on:
   workflow_dispatch:
   push:
-    branches: [master]
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -34,3 +36,31 @@ jobs:
       - name: Run Playwright E2E
         working-directory: ./frontend
         run: npm run test:e2e
+
+  real-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Test real application, database, S3 and external API failures
+        run: python scripts/run_e2e.py
+      - name: Save browser evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-e2e-report
+          path: |
+            frontend/playwright-report-real/
+            frontend/test-results-real/

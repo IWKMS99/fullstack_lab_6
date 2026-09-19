@@ -45,3 +45,7 @@ out/
 .env.*
 !.env.example
 frontend/coverage/
+frontend/playwright-report-real/
+frontend/test-results-real/
+frontend/test-results/
+frontend/playwright-report/
