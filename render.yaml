@@ -43,7 +43,7 @@ services:
       - key: S3_BUCKET
         value: roomflow-files
       - key: JAVA_TOOL_OPTIONS
-        value: '-XX:MaxRAMPercentage=60 -XX:+UseSerialGC'
+        value: '-Xms64m -Xmx192m -XX:MaxMetaspaceSize=160m -XX:ReservedCodeCacheSize=32m -XX:+UseSerialGC -XX:ActiveProcessorCount=2 -Xss512k -XX:TieredStopAtLevel=1'
 
 databases:
   - name: roomflow-labs-db

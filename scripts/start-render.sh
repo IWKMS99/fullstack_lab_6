@@ -3,7 +3,7 @@ set -euo pipefail
 export PORT="${PORT:-10000}"
 export SERVER_PORT=8080
 export APP_PUBLIC_BASE_URL="${APP_PUBLIC_BASE_URL:-${RENDER_EXTERNAL_URL:-http://localhost:${PORT}}}"
-export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=60 -XX:+UseSerialGC}"
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:--Xms64m -Xmx192m -XX:MaxMetaspaceSize=160m -XX:ReservedCodeCacheSize=32m -XX:+UseSerialGC -XX:ActiveProcessorCount=2 -Xss512k -XX:TieredStopAtLevel=1}"
 if [[ -n "${DATABASE_URL:-}" ]]; then
   # Render provides credentials separately; JDBC needs only host, port and database.
   database_address="${DATABASE_URL#*://}"
