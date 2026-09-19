@@ -1,4 +1,4 @@
-import {MAX_BOOKING_HOURS, WORKING_DAY_END, WORKING_DAY_START} from './bookingConstants';
+import {MAX_BOOKING_HOURS, SLOT_INTERVAL_MINUTES, WORKING_DAY_END, WORKING_DAY_START} from './bookingConstants';
 import {minutesToTime, timeToMinutes} from './timeSlots';
 import {validateSlotRange} from './validateSlotRange';
 
@@ -26,7 +26,7 @@ export const buildSlotsFromRange = (from: string, to: string): string[] => {
   }
 
   const slots: string[] = [];
-  for (let minute = timeToMinutes(from); minute < timeToMinutes(to); minute += 60) {
+  for (let minute = timeToMinutes(from); minute < timeToMinutes(to); minute += SLOT_INTERVAL_MINUTES) {
     slots.push(minutesToTime(minute));
   }
 

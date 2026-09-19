@@ -14,21 +14,21 @@ interface ApiErrorLike {
 }
 
 export const getApiStatus = (error: unknown): number | undefined => {
-  const typedError = error as ApiErrorLike;
-  return typedError.response?.status;
+  const typedError = error as ApiErrorLike | null | undefined;
+  return typedError?.response?.status;
 };
 
 export const getApiErrorMessage = (error: unknown, fallback: string): string => {
-  const typedError = error as ApiErrorLike;
-  return typedError.response?.data?.message ?? fallback;
+  const typedError = error as ApiErrorLike | null | undefined;
+  return typedError?.response?.data?.message ?? fallback;
 };
 
 export const getValidationViolationMessage = (
   error: unknown,
   fields: string[]
 ): string | undefined => {
-  const typedError = error as ApiErrorLike;
-  const violations = typedError.response?.data?.violations ?? [];
+  const typedError = error as ApiErrorLike | null | undefined;
+  const violations = typedError?.response?.data?.violations ?? [];
   if (!Array.isArray(violations)) {
     return undefined;
   }

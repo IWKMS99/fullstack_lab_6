@@ -15,6 +15,12 @@ export default defineConfig(({mode}) => {
       globals: true,
       css: true,
       include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+      coverage: {
+        provider: 'v8',
+        reporter: ['text', 'html', 'json-summary', 'lcov'],
+        include: ['src/features/booking/lib/*.ts', 'src/lib/httpError.ts', 'src/context/AuthContext.tsx', 'src/layers/OverlayLayer/components/RoomFormModal.tsx', 'src/services/queryKeys.ts'],
+        thresholds: { statements: 80, lines: 80, functions: 80, branches: 70 },
+      },
     },
     build: {
       chunkSizeWarningLimit: 1000,
