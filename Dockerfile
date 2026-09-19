@@ -7,21 +7,18 @@ RUN npm run build
 
 FROM eclipse-temurin:24-jdk AS builder
 WORKDIR /app
-COPY gradlew .
+COPY gradlew gradle.properties build.gradle.kts settings.gradle.kts ./
 COPY gradle gradle
-COPY build.gradle.kts settings.gradle.kts ./
-RUN sed -i 's/\r$//' gradlew
-RUN chmod +x gradlew
-RUN ./gradlew dependencies --no-daemon
-COPY src ./src
-COPY config ./config
-COPY --from=frontend /frontend/dist ./frontend/dist
-RUN ./gradlew bootJar --no-daemon
+RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
+COPY src src
+COPY config config
+COPY --from=frontend /frontend/dist frontend/dist
+RUN ./gradlew bootJar --no-daemon --max-workers=2
 
-FROM eclipse-temurin:24-jdk
+FROM eclipse-temurin:24-jre AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/* && useradd --system --uid 10001 app
 WORKDIR /app
-RUN adduser --system --group springuser
-COPY --from=builder /app/build/libs/*.jar app.jar
-RUN chown springuser:springuser app.jar
-USER springuser
-ENTRYPOINT ["sh", "-c", "exec java -jar app.jar"]
+COPY --from=builder --chown=app:app /app/build/libs/*-SNAPSHOT.jar app.jar
+USER app
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

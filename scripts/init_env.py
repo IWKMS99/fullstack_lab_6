@@ -1,6 +1,7 @@
 """Generate local configuration once without committing secrets."""
 from pathlib import Path
 import secrets
+import base64
 
 root = Path(__file__).resolve().parents[1]
 target = root / ".env"
@@ -9,7 +10,7 @@ if target.exists():
 values = {
     "POSTGRES_DB": "roomflow_db", "POSTGRES_USER": "roomflow",
     "POSTGRES_PASSWORD": secrets.token_hex(24), "SERVER_PORT": "8080",
-    "JWT_SECRET": secrets.token_urlsafe(48), "JWT_EXPIRATION": "900000",
+    "JWT_SECRET": base64.b64encode(secrets.token_bytes(48)).decode("ascii"), "JWT_EXPIRATION": "900000",
     "JWT_ACCESS_EXPIRATION_MS": "900000", "JWT_REFRESH_EXPIRATION_MS": "604800000",
     "AUTH_REFRESH_COOKIE_SECURE": "false", "AUTH_REFRESH_COOKIE_SAME_SITE": "Lax",
     "BOOTSTRAP_ADMIN_EMAIL": "admin@roomflow.local",

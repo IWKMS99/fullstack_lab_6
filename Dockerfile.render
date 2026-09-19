@@ -1,0 +1,28 @@
+FROM node:22-alpine AS frontend
+WORKDIR /frontend
+COPY frontend/package*.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+FROM eclipse-temurin:24-jdk AS builder
+WORKDIR /app
+COPY gradlew gradle.properties build.gradle.kts settings.gradle.kts ./
+COPY gradle gradle
+RUN sed -i 's/\r$//' gradlew && chmod +x gradlew
+COPY src src
+COPY config config
+COPY --from=frontend /frontend/dist frontend/dist
+RUN ./gradlew bootJar --no-daemon --max-workers=2
+
+FROM eclipse-temurin:24-jre
+RUN apt-get update && apt-get install -y --no-install-recommends nginx gettext-base tini curl && rm -rf /var/lib/apt/lists/* && useradd --system --uid 10001 app
+WORKDIR /app
+COPY --from=builder /app/build/libs/*-SNAPSHOT.jar app.jar
+COPY --from=frontend /frontend/dist /app/public
+COPY config/nginx/render.conf /app/nginx.template
+COPY scripts/start-render.sh /app/start-render.sh
+RUN chmod +x /app/start-render.sh && chown -R app:app /app /var/lib/nginx
+USER app
+EXPOSE 10000
+ENTRYPOINT ["tini", "--", "/app/start-render.sh"]

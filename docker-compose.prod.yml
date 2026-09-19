@@ -1,75 +1,100 @@
+name: roomflow
 services:
   db:
     image: postgres:16-alpine
-    container_name: roomflow-postgres-prod
-    env_file: ./.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-roomflow_db}
+      POSTGRES_USER: ${POSTGRES_USER:-roomflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Generate .env first}
     volumes:
-      - roomflow-pg-data-prod:/var/lib/postgresql/data
+      - database:/var/lib/postgresql/data
+    networks: [internal]
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
+      test: [CMD-SHELL, 'pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"']
+      interval: 5s
+      timeout: 3s
+      retries: 20
   minio:
     image: quay.io/minio/minio:RELEASE.2025-04-22T22-12-26Z
-    container_name: roomflow-minio-prod
-    env_file: ./.env
-    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Generate .env first}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Generate .env first}
+    command: server /data --console-address :9001
     ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - roomflow-minio-data-prod:/data
+      - '127.0.0.1:${S3_PORT:-9000}:9000'
+      - '127.0.0.1:${S3_CONSOLE_PORT:-9001}:9001'
+    volumes: [objects:/data]
+    networks: [internal, egress]
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1" ]
+      test: [CMD, curl, -f, http://localhost:9000/minio/health/live]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  storage-init:
+    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-roomflow-files}
+    depends_on:
+      minio: {condition: service_healthy}
+    networks: [internal]
+    entrypoint: ['/bin/sh', '-ec']
+    command:
+      - 'mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; mc mb --ignore-existing "local/$${S3_BUCKET}"; mc anonymous set none "local/$${S3_BUCKET}"'
+  app:
+    build: {context: ., dockerfile: Dockerfile}
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      POSTGRES_DB: ${POSTGRES_DB:-roomflow_db}
+      POSTGRES_USER: ${POSTGRES_USER:-roomflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SERVER_PORT: 8080
+      JWT_SECRET: ${JWT_SECRET:?Generate .env first}
+      JWT_ACCESS_EXPIRATION_MS: ${JWT_ACCESS_EXPIRATION_MS:-900000}
+      JWT_REFRESH_EXPIRATION_MS: ${JWT_REFRESH_EXPIRATION_MS:-604800000}
+      AUTH_REFRESH_COOKIE_SECURE: ${AUTH_REFRESH_COOKIE_SECURE:-false}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET: ${S3_BUCKET:-roomflow-files}
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8080}
+      HOLIDAY_API_BASE_URL: ${HOLIDAY_API_BASE_URL:-https://date.nager.at}
+      HOLIDAY_API_TIMEOUT_MS: ${HOLIDAY_API_TIMEOUT_MS:-1000}
+      JAVA_TOOL_OPTIONS: '-XX:MaxRAMPercentage=65 -XX:+UseSerialGC'
+    depends_on:
+      db: {condition: service_healthy}
+      storage-init: {condition: service_completed_successfully}
+    networks: [internal, egress]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:8080/actuator/health]
       interval: 10s
       timeout: 5s
-      retries: 5
-
-  mc:
-    image: quay.io/minio/mc:RELEASE.2025-04-16T18-13-26Z
-    container_name: roomflow-minio-mc-prod
-    env_file: ./.env
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD} &&
-      mc mb -p local/${S3_BUCKET} || true &&
-      mc anonymous set none local/${S3_BUCKET} || true
-      "
-
-  app:
-    image: roomflow-app:latest
-    container_name: roomflow-app-prod
-    build:
-      context: .
-      dockerfile: Dockerfile
-    env_file: ./.env
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-    restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-
+      retries: 20
+      start_period: 60s
   nginx:
-    container_name: roomflow-nginx-prod
-    build:
-      context: .
-      dockerfile: Dockerfile_nginx
-    ports:
-      - "8080:80"
-    restart: unless-stopped
+    build: {context: ., dockerfile: Dockerfile_nginx}
+    ports: ['127.0.0.1:${HTTP_PORT:-8080}:80']
     depends_on:
-      - app
-
+      app: {condition: service_healthy}
+    networks: [internal, egress]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, http://127.0.0.1/healthz]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 volumes:
-  roomflow-pg-data-prod:
-  roomflow-minio-data-prod:
+  database:
+  objects:
+networks:
+  internal:
+    internal: true
+  egress:

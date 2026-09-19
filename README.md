@@ -1,6 +1,33 @@
-# Лабораторная работа №4 — SEO и внешнее API
+# Лабораторная работа №6 — контейнеризация и CI/CD
 
 RoomFlow: бронирование переговорных комнат. Продолжение [исходного MVP](https://github.com/IWKMS99/RoomFlow) на согласованном стеке Java 24 / Spring Boot 3, React 19 / TypeScript, PostgreSQL и S3. История разработки сохранена.
+
+## Контейнеризация
+
+`Dockerfile` собирает frontend и backend отдельными стадиями; runtime содержит JRE и запускается от непривилегированного пользователя. `Dockerfile_nginx` содержит production frontend. Compose запускает PostgreSQL, закрытый MinIO, одноразовую инициализацию бакета, API и Nginx. База доступна только во внутренней сети, данные БД и объектов хранятся в именованных томах. Публикуемые локальные порты привязаны к `127.0.0.1`.
+
+Порядок запуска задаётся health checks: БД и хранилище → создание закрытого бакета → приложение → Nginx. `restart: unless-stopped` обеспечивает перезапуск после аварийного завершения. `/healthz` проверяет приложение через reverse proxy. Настройки и секреты передаются переменными окружения; `.env` исключён из Git и Docker build context. Flyway выполняет миграции при запуске, ошибка миграции не допускает готовность приложения.
+
+## CI/CD и бесплатный хостинг
+
+GitHub Actions проверяет frontend, backend и статический анализ, затем собирает production Compose, выполняет запросы к настоящим PostgreSQL и S3 и собирает отдельный образ Render. `docker-compose.ci.yml` подменяет только сторонний календарь детерминированным HTTP-сервисом. Проверяются регистрация, роли 401/403, CRUD/фильтры, бронирование, файл 2 MiB через Nginx, скачивание и удаление из S3, отзыв refresh-сессии.
+
+`render.yaml` описывает бесплатный Render Web Service в Frankfurt с автодеплоем `checksPass`. Для автодеплоя GitHub должен быть подключён к Render; одного публичного URL репозитория недостаточно. `Dockerfile.render` объединяет Nginx и Java в одном контейнере, `tini` обрабатывает сигналы, завершение любого из двух процессов завершает контейнер. Порт выдаёт Render, публичный origin берётся из `RENDER_EXTERNAL_URL`.
+
+Постоянные данные размещаются в Supabase Free: PostgreSQL через IPv4 session pooler и приватный S3-совместимый бакет `roomflow-files`. В форме Blueprint нужно задать `SPRING_DATASOURCE_URL` (JDBC, `sslmode=require`), `SPRING_DATASOURCE_USERNAME`, `SPRING_DATASOURCE_PASSWORD`, `S3_ENDPOINT`, `S3_PUBLIC_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`. Два S3 endpoint совпадают для Supabase. JWT-ключ генерируется Render, refresh-cookie передаётся только по HTTPS. Для первого администратора можно временно задать собственные `BOOTSTRAP_ADMIN_EMAIL` и `BOOTSTRAP_ADMIN_PASSWORD` (минимум 12 символов), после успешного запуска удалить эти переменные.
+
+Бесплатный Render засыпает после 15 минут без запросов, поэтому первый запрос может быть медленным; локальная файловая система непостоянна. Supabase Free имеет ограничения объёма и может приостановить неактивный проект. Бесплатный тариф Render PostgreSQL не используется, поскольку такая база ограничена по сроку жизни. Актуальные условия: [Render Free](https://render.com/docs/free), [Supabase Free](https://supabase.com/pricing), [Render Blueprint](https://render.com/docs/blueprint-spec).
+
+## Проверка production-сборки
+
+```bash
+python scripts/init_env.py
+docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml up --build -d --wait
+python scripts/smoke.py
+docker build -f Dockerfile.render -t roomflow-render:local .
+```
+
+Для обычной работы без тестового календаря запускать только `docker-compose.prod.yml`. Не удалять тома при обновлении. После изменения схемы восстановление выполняется из резервной копии либо новой корректирующей миграцией, а не отключением Flyway. `docker compose restart app` перечитывает существующее окружение контейнера; для изменённых переменных нужен `docker compose up -d`.
 
 ## Что реализовано
 

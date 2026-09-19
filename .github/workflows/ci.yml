@@ -90,3 +90,24 @@ jobs:
       - name: Build frontend
         working-directory: ./frontend
         run: npm run build
+
+  production-containers:
+    needs: [build-and-analyze, frontend-check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate isolated test credentials
+        run: python3 scripts/init_env.py
+      - name: Build and start production containers
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml up --build -d --wait
+      - name: Exercise real database, authentication and object storage
+        run: python3 scripts/smoke.py
+      - name: Build Render image
+        run: docker build -f Dockerfile.render -t roomflow-render:test .
+      - name: Container diagnostics
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml logs --tail=100
+      - name: Stop test containers
+        if: always()
+        run: docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml down

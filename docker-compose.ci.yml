@@ -1,0 +1,16 @@
+services:
+  holiday:
+    image: python:3.13-alpine
+    command: python /stub.py
+    volumes: ['./scripts/holiday_stub.py:/stub.py:ro']
+    networks: [internal]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8090/health')"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  app:
+    environment:
+      HOLIDAY_API_BASE_URL: http://holiday:8090
+    depends_on:
+      holiday: {condition: service_healthy}

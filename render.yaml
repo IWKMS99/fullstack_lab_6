@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: roomflow-labs
+    runtime: docker
+    plan: free
+    region: frankfurt
+    repo: https://github.com/IWKMS99/fullstack_lab_6
+    branch: master
+    dockerfilePath: ./Dockerfile.render
+    healthCheckPath: /healthz
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AUTH_REFRESH_COOKIE_SECURE
+        value: "true"
+      - key: SPRING_DATASOURCE_URL
+        sync: false
+      - key: SPRING_DATASOURCE_USERNAME
+        sync: false
+      - key: SPRING_DATASOURCE_PASSWORD
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_PUBLIC_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        sync: false
+      - key: S3_ACCESS_KEY
+        sync: false
+      - key: S3_SECRET_KEY
+        sync: false
+      - key: S3_BUCKET
+        value: roomflow-files
+      - key: JAVA_TOOL_OPTIONS
+        value: '-XX:MaxRAMPercentage=60 -XX:+UseSerialGC'
