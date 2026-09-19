@@ -78,16 +78,23 @@ test.describe.serial('real browser, API, PostgreSQL and private S3', () => {
     await page.getByRole('button', {name: 'Создать комнату', exact: true}).click();
     const form = page.locator('form');
     await form.getByRole('textbox', {name: 'Название'}).fill(name);
+    await expect(form.getByRole('textbox', {name: 'Название'})).toHaveValue(name);
+    const createdResponse = page.waitForResponse(response => response.url().endsWith('/api/v1/admin/rooms') && response.request().method() === 'POST');
     await form.getByRole('button', {name: 'Создать', exact: true}).click();
-    await page.getByPlaceholder('Поиск по названию').fill(name);
-    const row = page.getByRole('row').filter({hasText: name});
-    await expect(row).toBeVisible();
-    const listing = await request.get(`/api/v1/admin/rooms?search=${encodeURIComponent(name)}`, {headers: headers()});
-    const id = (await listing.json()).content[0].id;
+    const created = await createdResponse;
+    expect(created.status()).toBe(201);
+    const id = (await created.json()).id;
     try {
+      await expect(form).not.toBeVisible();
+      await page.getByPlaceholder('Поиск по названию').fill(name);
+      const row = page.getByRole('row').filter({hasText: name});
+      await expect(row).toBeVisible();
       await row.getByRole('button', {name: 'Редактировать', exact: true}).click();
       await form.getByRole('textbox', {name: 'Название'}).fill(`${name} updated`);
+      const updated = page.waitForResponse(response => response.url().endsWith(`/api/v1/admin/rooms/${id}`) && response.request().method() === 'PUT');
       await form.getByRole('button', {name: 'Сохранить', exact: true}).click();
+      expect((await updated).status()).toBe(200);
+      await expect(form).not.toBeVisible();
       await expect(row).toContainText('updated');
 
       const regular = await browser.newContext({baseURL: page.url().split('/admin')[0]});
@@ -109,7 +116,9 @@ test.describe.serial('real browser, API, PostgreSQL and private S3', () => {
       } finally { await regular.close(); }
 
       page.once('dialog', dialog => dialog.accept());
+      const deleted = page.waitForResponse(response => response.url().endsWith(`/api/v1/admin/rooms/${id}`) && response.request().method() === 'DELETE');
       await row.getByRole('button', {name: 'Удалить', exact: true}).click();
+      expect((await deleted).status()).toBe(204);
       await expect(row).not.toBeVisible();
       expect((await request.get(`/api/v1/rooms/${id}`)).status()).toBe(404);
     } finally { await request.delete(`/api/v1/admin/rooms/${id}`, {headers: headers()}); }

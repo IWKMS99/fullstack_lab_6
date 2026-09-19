@@ -17,5 +17,5 @@ export default defineConfig({
     launchOptions: {executablePath: process.env.E2E_CHROMIUM_EXECUTABLE},
     locale: 'ru-RU',
   },
-  projects: [{name: 'chromium-real', use: {...devices['Desktop Chrome']}}],
+  projects: [{name: 'chromium-real', use: {...devices['Desktop Chrome'], reducedMotion: 'reduce'}}],
 });
