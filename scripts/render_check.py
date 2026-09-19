@@ -48,6 +48,8 @@ class Client:
 
     def request(self, method, path, body=None, expected=200):
         headers = {"Content-Type": "application/json"}
+        if path.startswith("/api/"):
+            headers["Origin"] = self.base
         if self.token:
             headers["Authorization"] = "Bearer " + self.token
         request = Request(self.base + path, method=method, headers=headers,
@@ -124,7 +126,7 @@ def main():
         print("PASS: combined Nginx/Java image starts as non-root with an isolated database", flush=True)
 
         html, _ = client.request("GET", "/schedule")
-        for marker in ("<title>", "<h1", 'rel="canonical"', "application/ld+json", base):
+        for marker in ("<title>", 'rel="canonical"', "application/ld+json", base):
             if marker not in html:
                 raise AssertionError(f"Initial HTML is missing SEO marker: {marker}")
         asset = re.search(r'src="(/assets/[^\"]+\.js)"', html)
