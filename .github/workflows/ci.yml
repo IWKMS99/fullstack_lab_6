@@ -105,6 +105,8 @@ jobs:
         run: python3 scripts/smoke.py
       - name: Build Render image
         run: docker build -f Dockerfile.render -t roomflow-render:test .
+      - name: Validate Render runtime with the free-tier memory limit
+        run: python3 scripts/render_check.py --image roomflow-render:test --port 18088
       - name: Container diagnostics
         if: failure()
         run: docker compose -f docker-compose.prod.yml -f docker-compose.ci.yml logs --tail=100
