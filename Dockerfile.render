@@ -22,7 +22,7 @@ COPY --from=builder /app/build/libs/*-SNAPSHOT.jar app.jar
 COPY --from=frontend /frontend/dist /app/public
 COPY config/nginx/render.conf /app/nginx.template
 COPY scripts/start-render.sh /app/start-render.sh
-RUN chmod +x /app/start-render.sh && chown -R app:app /app /var/lib/nginx
+RUN sed -i 's/\r$//' /app/start-render.sh && chmod +x /app/start-render.sh && chown -R app:app /app /var/lib/nginx
 USER app
 EXPOSE 10000
 ENTRYPOINT ["tini", "--", "/app/start-render.sh"]
